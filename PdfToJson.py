@@ -1,46 +1,63 @@
-import PyPDF2
+"""
+PDF to JSON metadata extraction tool.
+Modernized to support modern pypdf, pathlib, and typing conventions.
+"""
+
+from __future__ import annotations
+
 import json
+from pathlib import Path
+from typing import Any
+import pypdf
 
-# main function
-def main():
-    path = ""
-    #get the name of pdf file and creat json file
-    while(True):
-        path = input("Enter Name of Article:")
-        path += ".pdf"
-        get_info(path)
 
-def get_info(path):
-    # get json sample format
-    json_file = {}
-    with open('output.json', 'r') as f:
-        json_file = json.load(f)
-    # read file from input path
+def extract_pdf_metadata(pdf_path: Path | str) -> dict[str, Any]:
+    """Read metadata from a PDF file using modern pypdf."""
+    path = Path(pdf_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"PDF file not found: {path}")
+
+    reader = pypdf.PdfReader(path)
+    metadata = reader.metadata or {}
+
+    doc_info: dict[str, Any] = {}
+    for key, value in metadata.items():
+        clean_key = str(key).lstrip("/").lower()
+        doc_info[clean_key] = str(value) if value is not None else ""
+
+    return {
+        "filename": path.name,
+        "page_count": len(reader.pages),
+        "metadata": doc_info,
+    }
+
+
+def save_metadata_to_json(data: dict[str, Any], output_path: Path | str) -> Path:
+    """Save extracted metadata dictionary as formatted JSON."""
+    out = Path(output_path)
+    with out.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+    return out
+
+
+def main() -> None:
+    filename_input = input("Enter path to PDF file (e.g. sample.pdf): ").strip()
+    if not filename_input:
+        print("No file specified.")
+        return
+
+    path = Path(filename_input)
+    if not path.suffix:
+        path = path.with_suffix(".pdf")
+
     try:
-        with open(path,'rb') as p:
-            pdf_file = PyPDF2.PdfFileReader(p, strict= False)
-            # get Document Info fram PdfFileReader
-            doc_info = pdf_file.getDocumentInfo()
-        # get info fram getDocumentInfo and put in json sample format
-        for info in doc_info:
-            json_file = add_info_json(json_file, info.replace('/','').lower(), doc_info[info])
-        #creat json file as a name of pdf
-        create_json(json_file, path)
-    except IOError:
-        print("Could not find the file name is {}".format(path))
+        extracted = extract_pdf_metadata(path)
+        out_json = path.with_suffix(".json")
+        save_metadata_to_json(extracted, out_json)
+        print(f"✅ Metadata saved to: {out_json}")
+    except Exception as exc:
+        print(f"❌ Error extracting metadata: {exc}")
 
-# function that get json object, key and value add to json object and return
-def add_info_json(json_file,key,value) -> dict:
-    if( key in json_file):
-        json_file[key] = value
-    return json_file
 
-#creat json file by input dict and file name
-def create_json(json_file, filename):
-    with open(filename.replace(".pdf", ".json"), 'w') as f:
-        json.dump(json_file, f, indent= 4)
-    print("Creat a new {} file\n".format(filename.replace(".pdf", ".json")))
-   
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
